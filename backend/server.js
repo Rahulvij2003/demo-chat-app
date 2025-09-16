@@ -17,6 +17,7 @@ app.use(express.json());
 app.use(cookieParser());
 app.use("/api/auth", require("./routes/authRoutes"));
 app.use("/api/messages", require("./routes/messageRoutes"));
+app.use("/api/groups", require("./routes/groupRoutes"));
 app.use("/api/files", require("./routes/fileRoutes"));
 app.use("/uploads", express.static("uploads"));
 const io = new Server(httpServer, {

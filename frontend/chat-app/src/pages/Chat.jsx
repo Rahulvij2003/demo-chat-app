@@ -7,7 +7,7 @@ const Chat = ({ user }) => {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const [receiverId, setReceiverId] = useState("");
-
+    const [file, setFile] = useState(null);
   useEffect(() => {
     if (user) {
       const newSocket = io("http://localhost:5000", { withCredentials: true });

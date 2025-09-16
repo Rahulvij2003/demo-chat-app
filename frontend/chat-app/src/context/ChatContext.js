@@ -16,29 +16,54 @@ export const ChatProvider = ({ children }) => {
   if (user) {
     const s = io("http://localhost:5000", {
       withCredentials: true,
-      query: { userId: user._id }, 
+      query: { userId: user._id },
     });
     setSocket(s);
     s.emit("join", user._id);
-    s.on("receiveMessage", (msg) => {
-        const senderId = msg.sender?._id || msg.sender;
-        const receiverId = msg.receiver?._id || msg.receiver;
 
-        if (
-            (senderId === selectedUser && receiverId === user._id) ||
-            (senderId === user._id && receiverId === selectedUser)
-        ) {
-            setMessages((prev) => [...prev, msg]);
-        }
-    });
+        s.on("receiveMessage", (msg) => {
+  const senderId = (msg.sender?._id || msg.sender || "").toString();
+  const receiverId = (msg.receiver?._id || msg.receiver || "").toString();
+  const currentSelectedUser = (selectedUser || "").toString();
+  const myId = (user._id || "").toString();
+
+  if (
+    (senderId === currentSelectedUser && receiverId === myId) ||
+    (senderId === myId && receiverId === currentSelectedUser)
+  ) {
+    const normalizedMsg = {
+      ...msg,
+      sender: senderId,
+      receiver: receiverId,
+      message: msg.message || msg.text || "",
+      // normalize file URL properly
+      file: msg.file?.url || msg.file?.path || msg.file || null,
+    };
+
+    setMessages((prev) => [...prev, normalizedMsg]);
+  }
+});
+
+
 
     return () => s.disconnect();
   }
 }, [user, selectedUser]);
+
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const res = await API.get("/auth/users");
+        let res = await API.get("/auth/users", { withCredentials: true });
+
+        if (res.status === 401) {
+          const refreshRes = await API.post("/auth/refresh-token", {}, { withCredentials: true });
+          if (refreshRes.ok || refreshRes.status === 200) {
+            res = await API.get("/auth/users", { withCredentials: true });
+          } else {
+            return; 
+          }
+        }
+
         setUsers(res.data.filter((u) => u._id !== user?._id));
       } catch (err) {
         console.error(err);
@@ -50,7 +75,18 @@ export const ChatProvider = ({ children }) => {
   const fetchMessages = async (otherUserId) => {
     setSelectedUser(otherUserId);
     try {
-      const res = await API.get(`/messages/${otherUserId}`);
+      let res = await API.get(`/messages/${otherUserId}`, { withCredentials: true });
+
+      if (res.status === 401) {
+        const refreshRes = await API.post("/auth/refresh-token", {}, { withCredentials: true });
+        if (refreshRes.ok || refreshRes.status === 200) {
+          res = await API.get(`/messages/${otherUserId}`, { withCredentials: true });
+        } else {
+          console.error("Failed to refresh token");
+          return;
+        }
+      }
+
       setMessages(res.data);
     } catch (err) {
       console.error("Error fetching messages:", err);
@@ -58,32 +94,47 @@ export const ChatProvider = ({ children }) => {
   };
 
   const sendMessage = async (text) => {
-    if (!selectedUser) return;
-    try {
-        const res = await API.post("/messages/send", {
-        receiver: selectedUser,
-        message: text,
-        });
+  if (!selectedUser) return;
+  try {
+    let res = await API.post(
+      "/messages/send",
+      { receiver: selectedUser, message: text },
+      { withCredentials: true } // send cookies
+    );
 
-        const savedMsg = {
-        ...res.data,
-        sender: res.data.sender?._id || res.data.sender,
-        receiver: res.data.receiver?._id || res.data.receiver,
-        };
-
-        setMessages((prev) => [...prev, savedMsg]);
-
-        socket.emit("sendMessage", {
-        sender: savedMsg.sender,
-        receiver: savedMsg.receiver,
-        message: savedMsg.message,
-        });
-    } catch (err) {
-        console.error("Error sending message:", err);
+    if (res.status === 401) {
+      // access token expired → refresh
+      const refreshRes = await API.post("/auth/refresh-token", {}, { withCredentials: true });
+      if (refreshRes.ok || refreshRes.status === 200) {
+        res = await API.post(
+          "/messages/send",
+          { receiver: selectedUser, message: text },
+          { withCredentials: true }
+        );
+      } else {
+        console.error("Failed to refresh token");
+        return;
+      }
     }
+
+    const savedMsg = {
+      ...res.data,
+      sender: res.data.sender?._id || res.data.sender,
+      receiver: res.data.receiver?._id || res.data.receiver,
     };
 
-    const sendFile = async (file) => {
+    setMessages((prev) => [...prev, savedMsg]);
+    socket.emit("sendMessage", {
+      sender: savedMsg.sender,
+      receiver: savedMsg.receiver,
+      message: savedMsg.message,
+    });
+  } catch (err) {
+    console.error("Error sending message:", err);
+  }
+};
+
+const sendFile = async (file) => {
   if (!selectedUser) return;
 
   const formData = new FormData();
@@ -91,9 +142,24 @@ export const ChatProvider = ({ children }) => {
   formData.append("receiver", selectedUser);
 
   try {
-    const res = await API.post("/files/upload", formData, {
+    let res = await API.post("/files/upload", formData, {
       headers: { "Content-Type": "multipart/form-data" },
+      withCredentials: true, // send cookies
     });
+
+    if (res.status === 401) {
+      // access token expired → refresh
+      const refreshRes = await API.post("/auth/refresh-token", {}, { withCredentials: true });
+      if (refreshRes.ok || refreshRes.status === 200) {
+        res = await API.post("/files/upload", formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+          withCredentials: true,
+        });
+      } else {
+        console.error("Failed to refresh token");
+        return;
+      }
+    }
 
     const savedMsg = {
       ...res.data,
@@ -102,11 +168,11 @@ export const ChatProvider = ({ children }) => {
     };
     setMessages((prev) => [...prev, savedMsg]);
     socket.emit("sendMessage", savedMsg);
-
   } catch (err) {
     console.error("Error sending file:", err);
   }
 };
+
 
 
 

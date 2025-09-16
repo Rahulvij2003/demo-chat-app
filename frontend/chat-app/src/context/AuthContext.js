@@ -6,12 +6,33 @@ export const AuthContext = createContext();
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+
   useEffect(() => {
     const fetchMe = async () => {
       try {
-        const res = await API.get("/auth/users");
-        setUser(res.data);
-      } catch {
+        const storedUser = localStorage.getItem("user");
+        if (storedUser) {
+          let res = await API.get("/auth/users", { withCredentials: true }); // send cookies
+
+          if (res.status === 401) {
+            const refreshRes = await API.post("/auth/refresh-token", {}, { withCredentials: true });
+
+            if (refreshRes.ok || refreshRes.status === 200) {
+              res = await API.get("/auth/users", { withCredentials: true });
+            } else {
+              localStorage.removeItem("user");
+              setUser(null);
+              return;
+            }
+          }
+
+          setUser(res.data);
+        } else {
+          setUser(null);
+        }
+      } catch (err) {
+        console.error(err);
+        localStorage.removeItem("user");
         setUser(null);
       } finally {
         setLoading(false);
@@ -20,9 +41,11 @@ export const AuthProvider = ({ children }) => {
     fetchMe();
   }, []);
 
+
   const login = async (email, password) => {
-    const res = await API.post("/auth/login", { email, password });
+    const res = await API.post("/auth/login", { email, password }, { withCredentials: true });
     setUser(res.data.user);
+    localStorage.setItem("user", JSON.stringify(res.data.user));
   };
 
   const register = async (username, email, password) => {
@@ -32,10 +55,12 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      await API.post("/auth/logout");
-      setUser(null);
+      await API.post("/auth/logout", {}, { withCredentials: true });
     } catch (err) {
       console.error("Logout failed", err);
+    } finally {
+      setUser(null);
+      localStorage.removeItem("user");
     }
   };
 
