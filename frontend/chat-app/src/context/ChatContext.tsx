@@ -15,7 +15,7 @@ interface Message {
   receiver: string;
   message?: string;
   file?: string | null;
-  [key: string]: any; // allow extra fields from backend
+  [key: string]: any; 
 }
 
 interface ChatContextType {
@@ -27,6 +27,7 @@ interface ChatContextType {
   sendMessage: (text: string) => Promise<void>;
   sendFile: (file: File) => Promise<void>;
   socket: Socket | null; 
+  onlineUsers: string[];
 }
 
 export const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -38,6 +39,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [file, setFile] = useState<File | null>(null);
+  const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   useEffect(() => {
     if (user) {
       const s: Socket = io("http://localhost:5000", {
@@ -46,6 +48,22 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       });
       setSocket(s);
       s.emit("join", user._id);
+
+      s.on("update-online-users", (users: string[]) => {
+        setOnlineUsers(users);
+      });
+
+
+
+      s.on("userOnline", (onlineUserId: string) => {
+        setOnlineUsers((prev) =>
+          prev.includes(onlineUserId) ? prev : [...prev, onlineUserId]
+        );
+      });
+
+      s.on("userOffline", (offlineUserId: string) => {
+        setOnlineUsers((prev) => prev.filter((id) => id !== offlineUserId));
+      });
 
       s.on("receiveMessage", (msg: any) => {
         const senderId = (msg.sender?._id || msg.sender || "").toString();
@@ -207,7 +225,8 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         fetchMessages,
         sendMessage,
         sendFile,
-        socket
+        socket,
+        onlineUsers
       }}
     >
       {children}

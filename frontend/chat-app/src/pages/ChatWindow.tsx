@@ -45,7 +45,7 @@ interface Group {
 }
 
 const ChatWindow = () => {
-  const { messages, sendMessage, selectedUser, users, sendFile, socket } = useContext<any>(ChatContext);
+  const { messages, sendMessage, selectedUser, users, sendFile, socket, onlineUsers } = useContext<any>(ChatContext);
   const {
     selectedGroup,
     sendGroupMessage,
@@ -150,6 +150,18 @@ useEffect(() => {
             <span>
               💬 {selectedGroup ? `Group: ${currentGroup?.name}` : `Chat with ${currentUser?.username}`}
             </span>
+            {!selectedGroup && currentUser && (
+      <span
+  className={`ml-2 px-2 py-0.5 text-xs rounded-full font-medium ${
+    onlineUsers?.includes(currentUser._id)
+      ? "bg-green-500 text-white"
+      : "bg-gray-400 text-white"
+  }`}
+>
+  {onlineUsers?.includes(currentUser._id) ? "Online" : "Offline"}
+</span>
+
+    )}
             {selectedGroup && (
   <InfoIcon
     onClick={() => setShowGroupInfo(true)}

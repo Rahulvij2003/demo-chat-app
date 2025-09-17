@@ -27,38 +27,41 @@ const io = new Server(httpServer, {
   }
 });
 
+// store which users are online
+const onlineUsers = {};
+
 io.on("connection", (socket) => {
   const userId = socket.handshake.query.userId;
 
   if (userId) {
     socket.join(userId);
+    onlineUsers[userId] = socket.id;
     console.log(`User ${userId} joined room`);
+    io.emit("update-online-users", Object.keys(onlineUsers));
   } else {
     console.log("User null joined room");
   }
 
   socket.on("sendMessage", (data) => {
     const { sender, receiver, message } = data;
-    // deliver to receiver in realtime
     io.to(receiver).emit("receiveMessage", { sender, receiver, message });
   });
 
-   socket.on("typing", ({ targetId, username, isGroup }) => {
-  if (isGroup) {
-    io.to(targetId).emit("typing", { username });
-  } else {
-    io.to(targetId).emit("typing", { username });
-  }
-});
+  socket.on("typing", ({ targetId, username, isGroup }) => {
+    if (isGroup) {
+      io.to(targetId).emit("typing", { username });
+    } else {
+      io.to(targetId).emit("typing", { username });
+    }
+  });
 
-socket.on("stop-typing", ({ targetId, username, isGroup }) => {
-  if (isGroup) {
-    io.to(targetId).emit("stop-typing", { username });
-  } else {
-    io.to(targetId).emit("stop-typing", { username });
-  }
-});
-
+  socket.on("stop-typing", ({ targetId, username, isGroup }) => {
+    if (isGroup) {
+      io.to(targetId).emit("stop-typing", { username });
+    } else {
+      io.to(targetId).emit("stop-typing", { username });
+    }
+  });
 
   socket.on("joinGroup", (groupId) => {
     if (groupId) {
@@ -78,9 +81,12 @@ socket.on("stop-typing", ({ targetId, username, isGroup }) => {
     });
   });
 
-
   socket.on("disconnect", () => {
     console.log("User disconnected", socket.id);
+    if (userId) {
+      delete onlineUsers[userId];
+      io.emit("user-offline", { userId });
+    }
   });
 });
 
