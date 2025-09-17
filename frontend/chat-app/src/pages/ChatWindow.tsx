@@ -56,6 +56,7 @@ const ChatWindow = () => {
     fetchGroups,
     removeMember,
     removeAdmin,
+    addMember
   } = useContext<any>(GroupContext);
   const { user } = useContext<any>(AuthContext);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
@@ -66,31 +67,34 @@ const ChatWindow = () => {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const [addingAdmins, setAddingAdmins] = useState<boolean>(false);
   const [selectedAdmins, setSelectedAdmins] = useState<string[]>([]);
-  const [typingUsers, setTypingUsers] = useState<string[]>([]); 
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [addingMembers, setAddingMembers] = useState<boolean>(false);
+  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+
   const displayedMessages: Message[] = selectedGroup ? groupMessages[selectedGroup] || [] : messages;
   useEffect(() => {
-  if (!socket) return;
+    if (!socket) return;
 
-  const handleTyping = ({ username }: { username: string }) => {
-    setTypingUsers((prev) => [...prev.filter((u) => u !== username), username]);
-  };
+    const handleTyping = ({ username }: { username: string }) => {
+      setTypingUsers((prev) => [...prev.filter((u) => u !== username), username]);
+    };
 
-  const handleStopTyping = ({ username }: { username: string }) => {
-    setTypingUsers((prev) => prev.filter((u) => u !== username));
-  };
+    const handleStopTyping = ({ username }: { username: string }) => {
+      setTypingUsers((prev) => prev.filter((u) => u !== username));
+    };
 
-  socket.on("typing", handleTyping);
-  socket.on("stop-typing", handleStopTyping);
+    socket.on("typing", handleTyping);
+    socket.on("stop-typing", handleStopTyping);
 
-  return () => {
-    socket.off("typing", handleTyping);
-    socket.off("stop-typing", handleStopTyping);
-  };
-}, [socket]);
+    return () => {
+      socket.off("typing", handleTyping);
+      socket.off("stop-typing", handleStopTyping);
+    };
+  }, [socket]);
 
   useEffect(() => {
-    firstLoadRef.current = true; 
+    firstLoadRef.current = true;
   }, [selectedUser, selectedGroup]);
 
   useEffect(() => {
@@ -101,13 +105,13 @@ const ChatWindow = () => {
     };
     fetchMessages();
   }, [selectedGroup, groupMessages]);
-useEffect(() => {
-  if (!displayedMessages.length) return;
-  if (firstLoadRef.current) {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    firstLoadRef.current = false;
-  }
-}, [displayedMessages]);
+  useEffect(() => {
+    if (!displayedMessages.length) return;
+    if (firstLoadRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      firstLoadRef.current = false;
+    }
+  }, [displayedMessages]);
 
 
 
@@ -151,135 +155,138 @@ useEffect(() => {
               💬 {selectedGroup ? `Group: ${currentGroup?.name}` : `Chat with ${currentUser?.username}`}
             </span>
             {!selectedGroup && currentUser && (
-      <span
-  className={`ml-2 px-2 py-0.5 text-xs rounded-full font-medium ${
-    onlineUsers?.includes(currentUser._id)
-      ? "bg-green-500 text-white"
-      : "bg-gray-400 text-white"
-  }`}
->
-  {onlineUsers?.includes(currentUser._id) ? "Online" : "Offline"}
-</span>
+              <span
+                className={`ml-2 px-2 py-0.5 text-xs rounded-full font-medium ${onlineUsers?.includes(currentUser._id)
+                    ? "bg-green-500 text-white"
+                    : "bg-gray-400 text-white"
+                  }`}
+              >
+                {onlineUsers?.includes(currentUser._id) ? "Online" : "Offline"}
+              </span>
 
-    )}
+            )}
             {selectedGroup && (
-  <InfoIcon
-    onClick={() => setShowGroupInfo(true)}
-    className="w-6 h-6 cursor-pointer hover:text-yellow-300 transition-transform duration-200 hover:scale-110"
-    style={{ minWidth: "24px", minHeight: "24px", verticalAlign: "middle" }}
-  />
-)}
-          </div>
-
-              <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-5 flex flex-col gap-3">
-  {displayedMessages.map((m: Message, index: number) => {
-    const isOwn = m.sender === user._id || (typeof m.sender === "object" && m.sender?._id === user._id);
-    const senderName =
-      selectedGroup && !isOwn ? (typeof m.sender === "object" ? m.sender?.username || "User" : null) : null;
-    const currentMessageDate = new Date(m.createdAt || "");
-    const previousMessageDate = index > 0 ? new Date(displayedMessages[index - 1]?.createdAt || "") : null;
-
-    let showDateSeparator = false;
-    if (index === 0) {
-      showDateSeparator = true;
-    } else if (
-      previousMessageDate &&
-      (currentMessageDate.getDate() !== previousMessageDate.getDate() ||
-        currentMessageDate.getMonth() !== previousMessageDate.getMonth() ||
-        currentMessageDate.getFullYear() !== previousMessageDate.getFullYear())
-    ) {
-      showDateSeparator = true;
-    }
-
-    return (
-      <div key={m._id} className="flex flex-col">
-        {showDateSeparator && (
-          <div className="flex justify-center my-2">
-            <span className="bg-gray-300 text-gray-700 px-3 py-1 rounded-full text-xs font-semibold">
-              {currentMessageDate.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
-            </span>
-          </div>
-        )}
-
-        <div className={`flex flex-col ${isOwn ? "items-end" : "items-start"}`}>
-          {senderName && <div className="text-xs text-gray-500 mb-1 ml-1">{senderName}</div>}
-          <div
-            className={`max-w-[70%] px-4 py-3 rounded-xl shadow-md break-words text-sm ${
-              isOwn
-                ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white"
-                : "bg-gray-200 text-gray-900"
-            }`}
-          >
-            {m.message || m.text}
-            {m.file && (
-              <div className="mt-1">
-                <a
-                  href={m.file}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`underline text-sm ${isOwn ? "text-yellow-300" : "text-blue-600"}`}
-                >
-                  📎 {m.file.split("/").pop()}
-                </a>
-              </div>
-            )}
-            {m.createdAt && (
-              <div className={`text-[10px] mt-1 text-gray-400 ${isOwn ? "text-right" : "text-left"}`}>
-                {currentMessageDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-              </div>
+              <InfoIcon
+                onClick={() => setShowGroupInfo(true)}
+                className="w-6 h-6 cursor-pointer hover:text-yellow-300 transition-transform duration-200 hover:scale-110"
+                style={{ minWidth: "24px", minHeight: "24px", verticalAlign: "middle" }}
+              />
             )}
           </div>
-        </div>
-      </div>
-    );
-  })}
-  <div ref={messagesEndRef} />
-</div>
 
-  <div className="h-6 text-sm text-gray-600 px-4 mb-2">
-  {typingUsers.length > 0 && (
-    <div className="flex items-center gap-2 animate-fadeIn">
-      <span className="italic text-blue-600 font-medium">
-        {typingUsers.join(", ")} {typingUsers.length === 1 ? "is" : "are"} typing
-      </span>
-      <span className="flex space-x-1">
-        <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "0s" }} />
-        <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }} />
-        <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "0.4s" }} />
-      </span>
-    </div>
-  )}
-</div>
+          <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-5 flex flex-col gap-3">
+            {displayedMessages.map((m: Message, index: number) => {
+              const isOwn = m.sender === user._id || (typeof m.sender === "object" && m.sender?._id === user._id);
+              const senderName =
+                selectedGroup && !isOwn ? (typeof m.sender === "object" ? m.sender?.username || "User" : null) : null;
+              const currentMessageDate = m.createdAt ? new Date(m.createdAt) : new Date();
+              const previousMessageDate =
+                index > 0
+                  ? displayedMessages[index - 1]?.createdAt
+                    ? new Date(displayedMessages[index - 1].createdAt!)
+                    : null
+                  : null;
+
+              let showDateSeparator = false;
+              if (currentMessageDate) {
+                if (index === 0) {
+                  showDateSeparator = true;
+                } else if (
+                  previousMessageDate &&
+                  (currentMessageDate.getDate() !== previousMessageDate.getDate() ||
+                    currentMessageDate.getMonth() !== previousMessageDate.getMonth() ||
+                    currentMessageDate.getFullYear() !== previousMessageDate.getFullYear())
+                ) {
+                  showDateSeparator = true;
+                }
+              }
+
+              return (
+                <div key={m._id} className="flex flex-col">
+                  {showDateSeparator && (
+                    <div className="flex justify-center my-2">
+                      <span className="bg-gray-300 text-gray-700 px-3 py-1 rounded-full text-xs font-semibold">
+                        {currentMessageDate.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className={`flex flex-col ${isOwn ? "items-end" : "items-start"}`}>
+                    {senderName && <div className="text-xs text-gray-500 mb-1 ml-1">{senderName}</div>}
+                    <div
+                      className={`max-w-[70%] px-4 py-3 rounded-xl shadow-md break-words text-sm ${isOwn
+                          ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white"
+                          : "bg-gray-200 text-gray-900"
+                        }`}
+                    >
+                      {m.message || m.text}
+                      {m.file && (
+                        <div className="mt-1">
+                          <a
+                            href={m.file}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`underline text-sm ${isOwn ? "text-yellow-300" : "text-blue-600"}`}
+                          >
+                            📎 {m.file.split("/").pop()}
+                          </a>
+                        </div>
+                      )}
+                      {m.createdAt && (
+                        <div className={`text-[10px] mt-1 text-gray-400 ${isOwn ? "text-right" : "text-left"}`}>
+                          {currentMessageDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            <div ref={messagesEndRef} />
+          </div>
+
+          <div className="h-6 text-sm text-gray-600 px-4 mb-2">
+            {typingUsers.length > 0 && (
+              <div className="flex items-center gap-2 animate-fadeIn">
+                <span className="italic text-blue-600 font-medium">
+                  {typingUsers.join(", ")} {typingUsers.length === 1 ? "is" : "are"} typing
+                </span>
+                <span className="flex space-x-1">
+                  <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "0s" }} />
+                  <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }} />
+                  <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "0.4s" }} />
+                </span>
+              </div>
+            )}
+          </div>
 
 
 
           <div className="flex items-center gap-3 flex-shrink-0 px-4 py-3 border-t bg-white">
             <input
-  value={text}
-  onChange={(e) => {
-  setText(e.target.value);
-  if (!socket) return;
+              value={text}
+              onChange={(e) => {
+                setText(e.target.value);
+                if (!socket) return;
 
-  if (selectedUser) {
-    // one-to-one typing
-    socket.emit("typing", { targetId: selectedUser, username: user.username });
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    typingTimeoutRef.current = setTimeout(() => {
-      socket.emit("stop-typing", { targetId: selectedUser, username: user.username });
-    }, 2000);
-  } else if (selectedGroup) {
-    // group typing
-    socket.emit("typing", { targetId: selectedGroup, username: user.username, isGroup: true });
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    typingTimeoutRef.current = setTimeout(() => {
-      socket.emit("stop-typing", { targetId: selectedGroup, username: user.username, isGroup: true });
-    }, 2000);
-  }
-}}
+                if (selectedUser) {
+                  socket.emit("typing", { targetId: selectedUser, username: user.username });
+                  if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+                  typingTimeoutRef.current = setTimeout(() => {
+                    socket.emit("stop-typing", { targetId: selectedUser, username: user.username });
+                  }, 2000);
+                } else if (selectedGroup) {
+                  socket.emit("typing", { targetId: selectedGroup, username: user.username, isGroup: true });
+                  if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+                  typingTimeoutRef.current = setTimeout(() => {
+                    socket.emit("stop-typing", { targetId: selectedGroup, username: user.username, isGroup: true });
+                  }, 2000);
+                }
+              }}
 
-  placeholder="Type a message..."
-  className="flex-1 px-4 py-3 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-/>
+              placeholder="Type a message..."
+              className="flex-1 px-4 py-3 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            />
 
             <input
               type="file"
@@ -302,22 +309,106 @@ useEffect(() => {
             <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
               <div className="bg-white rounded-3xl p-8 w-[1000px] h-[90vh] max-w-full shadow-2xl border border-gray-200 relative flex flex-col">
                 {user._id === currentGroup.createdBy && !addingAdmins && (
-                  <button
-                    onClick={() => setAddingAdmins(true)}
-                    className="absolute top-6 right-16 px-5 py-2 rounded-lg bg-blue-500 text-white font-semibold shadow hover:bg-blue-600 transition"
-                  >
-                    ➕ Add New Admin
-                  </button>
+  <div className="absolute top-6 right-6 flex gap-4">
+    <button
+      onClick={() => setAddingAdmins(true)}
+      className="px-5 py-2 rounded-lg bg-blue-500 text-white font-semibold shadow hover:bg-blue-600 transition"
+    >
+      ➕ Add New Admin
+    </button>
+
+    <button
+      onClick={() => setAddingMembers(true)}
+      className="px-5 py-2 rounded-lg bg-green-500 text-white font-semibold shadow hover:bg-green-600 transition"
+    >
+      ➕ Add New Member
+    </button>
+  </div>
+)}
+
+
+
+
+
+                <div className="flex items-center mb-6 gap-x-4">
+  <button
+    onClick={() => setShowGroupInfo(false)}
+    className="text-gray-500 hover:text-gray-800 text-2xl font-bold transition"
+  >
+    &times;
+  </button>
+  <h2 className="text-3xl font-bold text-blue-600">Group Info</h2>
+</div>
+
+
+                {addingMembers && (
+                  <div className="flex flex-col flex-1">
+                    <h3 className="text-xl font-semibold mb-3 text-green-600">
+                      Select Users to Add to Group
+                    </h3>
+                    <div className="flex-1 overflow-y-auto grid grid-cols-2 gap-4">
+                      {users
+  .filter((u: User) => !currentGroup.members?.some(m => m._id === u._id))
+  .map((userOption: User) => (
+    <label
+      key={userOption._id}
+      className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-green-50 transition ${
+        selectedMembers.includes(userOption._id) ? "bg-green-50" : ""
+      }`}
+    >
+      <input
+        type="checkbox"
+        value={userOption._id}
+        checked={selectedMembers.includes(userOption._id)}
+        onChange={(e) => {
+          if (e.target.checked) {
+            setSelectedMembers([...selectedMembers, userOption._id]);
+          } else {
+            setSelectedMembers(selectedMembers.filter(id => id !== userOption._id));
+          }
+        }}
+        className="w-4 h-4 text-green-600"
+      />
+      <div className="flex flex-col">
+        <p className="font-medium text-sm">{userOption.username}</p>
+        <p className="text-xs text-gray-500">{userOption.email || ""}</p>
+      </div>
+    </label>
+  ))}
+
+                    </div>
+
+                    <div className="flex justify-end gap-3 mt-6">
+                      <button
+                        onClick={() => {
+                          setAddingMembers(false);
+                          setSelectedMembers([]);
+                        }}
+                        className="px-4 py-2 rounded-lg bg-gray-300 text-gray-800 hover:bg-gray-400 transition"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={async () => {
+                          try {
+                            for (const memberId of selectedMembers) {
+                              await addMember(currentGroup._id, memberId);
+                              fetchGroups();
+                            }
+                            setAddingMembers(false);
+                            setSelectedMembers([]);
+                          } catch (err) {
+                            console.error("Error adding members:", err);
+                          }
+                        }}
+                        className="px-5 py-2 rounded-lg bg-green-600 text-white font-semibold shadow hover:bg-green-700 transition"
+                      >
+                        Confirm
+                      </button>
+                    </div>
+                  </div>
                 )}
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-3xl font-bold text-blue-600">Group Info</h2>
-                  <button
-                    onClick={() => setShowGroupInfo(false)}
-                    className="text-gray-500 hover:text-gray-800 text-2xl font-bold transition"
-                  >
-                    &times;
-                  </button>
-                </div>
+
 
                 {addingAdmins ? (
                   <div className="flex flex-col flex-1">
@@ -328,9 +419,8 @@ useEffect(() => {
                         .map((member) => (
                           <label
                             key={member._id}
-                            className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-blue-50 transition ${
-                              selectedAdmins.includes(member._id) ? "bg-blue-50" : ""
-                            }`}
+                            className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-blue-50 transition ${selectedAdmins.includes(member._id) ? "bg-blue-50" : ""
+                              }`}
                           >
                             <input
                               type="checkbox"
