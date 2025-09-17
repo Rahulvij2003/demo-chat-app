@@ -26,6 +26,7 @@ interface ChatContextType {
   fetchMessages: (otherUserId: string) => Promise<void>;
   sendMessage: (text: string) => Promise<void>;
   sendFile: (file: File) => Promise<void>;
+  socket: Socket | null; 
 }
 
 export const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -37,8 +38,6 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [file, setFile] = useState<File | null>(null);
-
-  // ---- Setup socket ----
   useEffect(() => {
     if (user) {
       const s: Socket = io("http://localhost:5000", {
@@ -76,7 +75,6 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [user, selectedUser]);
 
-  // ---- Fetch users ----
   useEffect(() => {
     const fetchUsers = async () => {
       try {
@@ -100,7 +98,6 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     if (user) fetchUsers();
   }, [user]);
 
-  // ---- Fetch messages ----
   const fetchMessages = async (otherUserId: string) => {
     setSelectedUser(otherUserId);
     try {
@@ -122,7 +119,6 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // ---- Send message ----
   const sendMessage = async (text: string) => {
     if (!selectedUser) return;
     try {
@@ -163,7 +159,6 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // ---- Send file ----
   const sendFile = async (file: File) => {
     if (!selectedUser) return;
 
@@ -212,6 +207,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         fetchMessages,
         sendMessage,
         sendFile,
+        socket
       }}
     >
       {children}

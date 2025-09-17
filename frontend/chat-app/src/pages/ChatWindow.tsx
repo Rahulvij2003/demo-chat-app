@@ -4,9 +4,7 @@ import React from "react";
 import { ChatContext } from "../context/ChatContext";
 import { GroupContext } from "../context/GroupContext";
 import { AuthContext } from "../context/AuthContext";
-// 1️⃣ Import
 import { FiInfo } from "react-icons/fi";
-// Wrap it as a React Functional Component
 const InfoIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   <svg
     viewBox="0 0 24 24"
@@ -29,6 +27,7 @@ interface Message {
   message?: string;
   text?: string;
   file?: string;
+  createdAt?: string;
 }
 
 interface User {
@@ -46,7 +45,7 @@ interface Group {
 }
 
 const ChatWindow = () => {
-  const { messages, sendMessage, selectedUser, users, sendFile } = useContext<any>(ChatContext);
+  const { messages, sendMessage, selectedUser, users, sendFile, socket } = useContext<any>(ChatContext);
   const {
     selectedGroup,
     sendGroupMessage,
@@ -67,8 +66,28 @@ const ChatWindow = () => {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const [addingAdmins, setAddingAdmins] = useState<boolean>(false);
   const [selectedAdmins, setSelectedAdmins] = useState<string[]>([]);
-
+  const [typingUsers, setTypingUsers] = useState<string[]>([]); 
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const displayedMessages: Message[] = selectedGroup ? groupMessages[selectedGroup] || [] : messages;
+  useEffect(() => {
+  if (!socket) return;
+
+  const handleTyping = ({ username }: { username: string }) => {
+    setTypingUsers((prev) => [...prev.filter((u) => u !== username), username]);
+  };
+
+  const handleStopTyping = ({ username }: { username: string }) => {
+    setTypingUsers((prev) => prev.filter((u) => u !== username));
+  };
+
+  socket.on("typing", handleTyping);
+  socket.on("stop-typing", handleStopTyping);
+
+  return () => {
+    socket.off("typing", handleTyping);
+    socket.off("stop-typing", handleStopTyping);
+  };
+}, [socket]);
 
   useEffect(() => {
     firstLoadRef.current = true; 
@@ -81,7 +100,7 @@ const ChatWindow = () => {
       }
     };
     fetchMessages();
-  }, [selectedGroup]);
+  }, [selectedGroup, groupMessages]);
 useEffect(() => {
   if (!displayedMessages.length) return;
   if (firstLoadRef.current) {
@@ -140,49 +159,116 @@ useEffect(() => {
 )}
           </div>
 
-          <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-5 flex flex-col gap-3">
-            {displayedMessages.map((m: Message) => {
-              const isOwn = m.sender === user._id || (typeof m.sender === "object" && m.sender?._id === user._id);
-              const senderName =
-                selectedGroup && !isOwn ? (typeof m.sender === "object" ? m.sender?.username || "User" : null) : null;
+              <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-5 flex flex-col gap-3">
+  {displayedMessages.map((m: Message, index: number) => {
+    const isOwn = m.sender === user._id || (typeof m.sender === "object" && m.sender?._id === user._id);
+    const senderName =
+      selectedGroup && !isOwn ? (typeof m.sender === "object" ? m.sender?.username || "User" : null) : null;
+    const currentMessageDate = new Date(m.createdAt || "");
+    const previousMessageDate = index > 0 ? new Date(displayedMessages[index - 1]?.createdAt || "") : null;
 
-              return (
-                <div key={m._id} className={`flex flex-col ${isOwn ? "items-end" : "items-start"}`}>
-                  {senderName && <div className="text-xs text-gray-500 mb-1 ml-1">{senderName}</div>}
-                  <div
-                    className={`max-w-[70%] px-4 py-3 rounded-xl shadow-md break-words text-sm ${
-                      isOwn
-                        ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white"
-                        : "bg-gray-200 text-gray-900"
-                    }`}
-                  >
-                    {m.message || m.text}
-                    {m.file && (
-                      <div className="mt-1">
-                        <a
-                          href={m.file}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={`underline text-sm ${isOwn ? "text-yellow-300" : "text-blue-600"}`}
-                        >
-                          📎 {m.file.split("/").pop()}
-                        </a>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-            <div ref={messagesEndRef} />
+    let showDateSeparator = false;
+    if (index === 0) {
+      showDateSeparator = true;
+    } else if (
+      previousMessageDate &&
+      (currentMessageDate.getDate() !== previousMessageDate.getDate() ||
+        currentMessageDate.getMonth() !== previousMessageDate.getMonth() ||
+        currentMessageDate.getFullYear() !== previousMessageDate.getFullYear())
+    ) {
+      showDateSeparator = true;
+    }
+
+    return (
+      <div key={m._id} className="flex flex-col">
+        {showDateSeparator && (
+          <div className="flex justify-center my-2">
+            <span className="bg-gray-300 text-gray-700 px-3 py-1 rounded-full text-xs font-semibold">
+              {currentMessageDate.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+            </span>
           </div>
+        )}
+
+        <div className={`flex flex-col ${isOwn ? "items-end" : "items-start"}`}>
+          {senderName && <div className="text-xs text-gray-500 mb-1 ml-1">{senderName}</div>}
+          <div
+            className={`max-w-[70%] px-4 py-3 rounded-xl shadow-md break-words text-sm ${
+              isOwn
+                ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white"
+                : "bg-gray-200 text-gray-900"
+            }`}
+          >
+            {m.message || m.text}
+            {m.file && (
+              <div className="mt-1">
+                <a
+                  href={m.file}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`underline text-sm ${isOwn ? "text-yellow-300" : "text-blue-600"}`}
+                >
+                  📎 {m.file.split("/").pop()}
+                </a>
+              </div>
+            )}
+            {m.createdAt && (
+              <div className={`text-[10px] mt-1 text-gray-400 ${isOwn ? "text-right" : "text-left"}`}>
+                {currentMessageDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  })}
+  <div ref={messagesEndRef} />
+</div>
+
+  <div className="h-6 text-sm text-gray-600 px-4 mb-2">
+  {typingUsers.length > 0 && (
+    <div className="flex items-center gap-2 animate-fadeIn">
+      <span className="italic text-blue-600 font-medium">
+        {typingUsers.join(", ")} {typingUsers.length === 1 ? "is" : "are"} typing
+      </span>
+      <span className="flex space-x-1">
+        <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "0s" }} />
+        <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }} />
+        <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "0.4s" }} />
+      </span>
+    </div>
+  )}
+</div>
+
+
 
           <div className="flex items-center gap-3 flex-shrink-0 px-4 py-3 border-t bg-white">
             <input
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder="Type a message..."
-              className="flex-1 px-4 py-3 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-            />
+  value={text}
+  onChange={(e) => {
+  setText(e.target.value);
+  if (!socket) return;
+
+  if (selectedUser) {
+    // one-to-one typing
+    socket.emit("typing", { targetId: selectedUser, username: user.username });
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      socket.emit("stop-typing", { targetId: selectedUser, username: user.username });
+    }, 2000);
+  } else if (selectedGroup) {
+    // group typing
+    socket.emit("typing", { targetId: selectedGroup, username: user.username, isGroup: true });
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      socket.emit("stop-typing", { targetId: selectedGroup, username: user.username, isGroup: true });
+    }, 2000);
+  }
+}}
+
+  placeholder="Type a message..."
+  className="flex-1 px-4 py-3 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+/>
+
             <input
               type="file"
               onChange={(e) => e.target.files && setFile(e.target.files[0])}

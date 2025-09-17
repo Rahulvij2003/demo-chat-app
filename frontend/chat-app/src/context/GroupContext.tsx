@@ -54,34 +54,64 @@ export const GroupProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
 
   useEffect(() => {
-    if (!user) return;
+  if (!user) return;
 
-    const s: Socket = io("http://localhost:5000", {
-      withCredentials: true,
-      query: { userId: user._id },
-    });
+  const s: Socket = io("http://localhost:5000", {
+    withCredentials: true,
+    query: { userId: user._id },
+  });
 
-    setSocket(s);
+  setSocket(s);
 
-    s.on("receiveMessage", (msg: any) => {
-      const normalizedMsg: Message = {
-        ...msg,
-        sender: msg.sender?._id || msg.sender,
-        group: msg.group,
-        text: msg.text || msg.message || "",
-        fileUrl: msg.file?.url || msg.fileUrl || null,
-      };
-
-      setGroupMessages((prev) => ({
-        ...prev,
-        [normalizedMsg.group]: [...(prev[normalizedMsg.group] || []), normalizedMsg],
-      }));
-    });
-
-    return () => {
-      s.disconnect();
+  // One-on-one messages
+  s.on("receiveMessage", (msg: any) => {
+    const normalizedMsg: Message = {
+      ...msg,
+      sender: msg.sender?._id || msg.sender,
+      group: msg.group,
+      text: msg.text || msg.message || "",
+      fileUrl: msg.file?.url || msg.fileUrl || null,
     };
-  }, [user]);
+
+    setGroupMessages((prev) => ({
+      ...prev,
+      [normalizedMsg.group]: [...(prev[normalizedMsg.group] || []), normalizedMsg],
+    }));
+  });
+
+  // Group messages
+  s.on("receiveGroupMessage", (msg: any) => {
+    const normalizedMsg: Message = {
+      ...msg,
+      group: msg.group,
+      sender: msg.sender,
+      text: msg.text,
+      fileUrl: msg.fileUrl || null,
+      createdAt: msg.createdAt,
+    };
+
+    setGroupMessages((prev) => ({
+      ...prev,
+      [msg.group]: [...(prev[msg.group] || []), normalizedMsg],
+    }));
+  });
+
+  return () => {
+    s.disconnect();
+  };
+}, [user]);
+useEffect(() => {
+  if (selectedGroup && socket) {
+    if (socket.connected) {
+      socket.emit("joinGroup", selectedGroup._id);
+    } else {
+      socket.on("connect", () => {
+        socket.emit("joinGroup", selectedGroup._id);
+      });
+    }
+  }
+}, [selectedGroup, socket]);
+
 
   const handleRequestWithRefresh = async (apiCall: () => Promise<any>) => {
     try {
@@ -167,25 +197,38 @@ export const GroupProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   const sendGroupMessage = async (groupId: string, formData: FormData) => {
-    const handleRequest = () =>
+  try {
+    const res = await handleRequestWithRefresh(() =>
       API.post(`/groups/${groupId}/send`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
         withCredentials: true,
-      });
+      })
+    );
+    if (!res) return;
 
-    try {
-      const res = await handleRequestWithRefresh(handleRequest);
-      if (!res) return;
-      setGroupMessages((prev) => ({
-        ...prev,
-        [groupId]: [...(prev[groupId] || []), res.data],
-      }));
-      return res.data;
-    } catch (err) {
-      console.error("Error sending group message:", err);
-      throw err;
+    // Update local state
+    setGroupMessages((prev) => ({
+      ...prev,
+      [groupId]: [...(prev[groupId] || []), res.data],
+    }));
+
+    // Emit to socket
+    if (socket) {
+      socket.emit("sendGroupMessage", {
+        groupId, // use parameter, not selectedGroup
+        sender: user._id,
+        text: formData.get("message"),
+        fileUrl: null,
+      });
     }
-  };
+
+    return res.data;
+  } catch (err) {
+    console.error("Error sending group message:", err);
+    throw err;
+  }
+};
+
 
   const getGroupMessages = async (groupId: string) => {
     const res = await handleRequestWithRefresh(() =>

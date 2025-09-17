@@ -43,6 +43,42 @@ io.on("connection", (socket) => {
     io.to(receiver).emit("receiveMessage", { sender, receiver, message });
   });
 
+   socket.on("typing", ({ targetId, username, isGroup }) => {
+  if (isGroup) {
+    io.to(targetId).emit("typing", { username });
+  } else {
+    io.to(targetId).emit("typing", { username });
+  }
+});
+
+socket.on("stop-typing", ({ targetId, username, isGroup }) => {
+  if (isGroup) {
+    io.to(targetId).emit("stop-typing", { username });
+  } else {
+    io.to(targetId).emit("stop-typing", { username });
+  }
+});
+
+
+  socket.on("joinGroup", (groupId) => {
+    if (groupId) {
+      socket.join(groupId);
+      console.log(`Socket ${socket.id} joined group ${groupId}`);
+    }
+  });
+
+  socket.on("sendGroupMessage", (data) => {
+    const { groupId, sender, text, fileUrl } = data;
+    io.to(groupId).emit("receiveGroupMessage", {
+      group: groupId,
+      sender,
+      text,
+      fileUrl,
+      createdAt: new Date(),
+    });
+  });
+
+
   socket.on("disconnect", () => {
     console.log("User disconnected", socket.id);
   });
