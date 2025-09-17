@@ -1,20 +1,25 @@
-import { useContext } from "react";
+import { ReactNode } from "react";
+import './index.css';
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider, AuthContext } from "./context/AuthContext";
+import { AuthProvider, useAuth } from "./context/AuthContext"; 
 import { ChatProvider } from "./context/ChatContext";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Home from "./pages/Home";
 
-const ProtectedRoute = ({ children }) => {
-  const { user } = useContext(AuthContext);
+interface ProtectedRouteProps {
+  children: ReactNode;
+}
+
+const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
+  const { user } = useAuth(); // safe access
 
   if (!user) return <Navigate to="/login" replace />;
-  return children;
+  return <>{children}</>;
 };
 
 const AppContent = () => {
-  const { user } = useContext(AuthContext);
+  const { user } = useAuth(); // safe access
 
   return (
     <Routes>
@@ -51,7 +56,7 @@ const AppContent = () => {
 function App() {
   return (
     <AuthProvider>
-      <div className="h-screen overflow-hidden"> 
+      <div className="h-screen overflow-hidden">
         <Router>
           <AppContent />
         </Router>

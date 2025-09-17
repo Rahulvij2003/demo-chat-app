@@ -76,8 +76,8 @@ exports.getMyGroups = async (req, res) => {
 
 exports.sendGroupMessage = async (req, res) => {
   const { groupId } = req.params;
-  const messageText = req.body.message || ""; 
-  const filePath = req.file ? req.file.path : null; 
+  const { message } = req.body;
+  const file = req.file ? `/uploads/${req.file.filename}` : null;
 
   try {
     const group = await GroupChat.findById(groupId);
@@ -89,8 +89,8 @@ exports.sendGroupMessage = async (req, res) => {
     const groupMsg = await GroupMessage.create({
       group: groupId,
       sender: req.user.id,
-      message: messageText,
-      file: filePath,
+      message: message || "",
+      file: file,
     });
 
     res.status(201).json(groupMsg);

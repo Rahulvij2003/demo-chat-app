@@ -5,7 +5,12 @@ import App from './App';
 import reportWebVitals from './reportWebVitals';
 import { AuthProvider } from './context/AuthContext';
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
+const container = document.getElementById('root');
+if (!container) {
+  throw new Error("Root container missing in index.html");
+}
+
+const root = ReactDOM.createRoot(container as HTMLElement);
 root.render(
   <React.StrictMode>
     <AuthProvider>

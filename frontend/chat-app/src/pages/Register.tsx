@@ -1,21 +1,31 @@
-import React, { useState } from "react";
+import React, { useState, ChangeEvent, FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import API from "../services/api";
 
+interface FormData {
+  username: string;
+  email: string;
+  password: string;
+}
+
 const Register = () => {
-  const [form, setForm] = useState({ username: "", email: "", password: "" });
-  const [message, setMessage] = useState("");
+  const [form, setForm] = useState<FormData>({
+    username: "",
+    email: "",
+    password: "",
+  });
+  const [message, setMessage] = useState<string>("");
   const navigate = useNavigate();
 
-  const handleChange = (e) =>
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) =>
     setForm({ ...form, [e.target.name]: e.target.value });
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     try {
       const res = await API.post("/auth/register", form);
       setMessage(res.data.message);
-    } catch (err) {
+    } catch (err: any) {
       setMessage(err.response?.data?.message || "Error");
     }
   };
